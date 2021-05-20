@@ -1,17 +1,19 @@
 <?php
 header('Content-type: json/application');
-
+error_reporting(E_ALL ^ E_WARNING); // disable warnings
 
 require_once "functions.php";
 require_once "vendor.php";
 require_once "constants.php";
+require_once "response.php";
+require_once "requestDecliner.php";
 
-function getDataFromRequest($method) {
+function getDataFromRequest($method) { // JSON interaction only (exclude files)
     if ($method === 'GET') return $_GET;
-    if ($method === 'POST' && !empty($_POST)) return $_POST;
+    if ($method === 'POST' && !empty($_FILES)) return $_FILES;
 
     $incomingData = file_get_contents('php://input');
-    $decodedJSON = json_decode($incomingData);
+    $decodedJSON = json_decode($incomingData); //пытаемся преобразовать то, что нам пришло из JSON в объект PHP
     if ($decodedJSON)
     {
         $data = $decodedJSON;
@@ -32,51 +34,18 @@ function getDataFromRequest($method) {
     return $data;
 }
 
+ConfigureDB();
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// if admin or/and his role doesn't exists yet:
-global $connect;
-$adminRoleName = ADMIN_ROLE_NAME;
-$adminRole = $connect->query("SELECT * FROM `role` WHERE `role`.`Name` = '$adminRoleName'");
-
-if ($adminRole->num_rows == 0) {
-    $connect->query("INSERT INTO `role` (`Id`, `Name`) VALUES (NULL, '$adminRoleName')");
-} // Creating Admin role if it doesn't exists
-
-$adminRoleId = mysqli_fetch_array($connect->query("SELECT `Id` FROM `role` WHERE `role`.`Name` = '$adminRoleName'"));
-$admin = $connect->query("SELECT * FROM `user` WHERE `user`.`Role_Id` = '$adminRoleId[0]'");
-
-if($admin->num_rows == 0) {
-    $token = generateToken();
-    $connect->query("INSERT INTO `user` (`Id`, `Name`, `Surname`, `Password`, `Birthday`, `Avatar`, `Status`, `Username`, `Token`, `City_Id`, `Role_Id`) 
-                               VALUES (NULL, 'Main', 'Admin', '123456789', NULL, NULL, 'Want to die', 'Admin', '$token', NUll, '$adminRoleId[0]')");
-} // Creating Admin if he doesn't exists
-//
 
 $method = $_SERVER['REQUEST_METHOD'];
-$formData = getDataFromRequest($method);
+$data = getDataFromRequest($method);
+
+if(is_array($data)) {
+    if (isset($data["q"])) {
+        unset($data["q"]);
+    }
+}
 
 if (isset($_GET['q'])) { // if local url isn't empty
     $localUrl = $_GET['q']; // Set a local url form $_GET
@@ -92,8 +61,8 @@ else {
 
 if (isset($localUrlParts)) { // if local url isn't empty
     if (file_exists('Controllers/' . $controller . '.php')) {
-        include_once 'Controllers/' . $controller . '.php';
-        route($method, $controllerData, $formData);
+        require_once 'Controllers/' . $controller . '.php';
+        route($method, $controllerData, $data);
     }
     else {
         http_response_code(404);
@@ -102,3 +71,9 @@ if (isset($localUrlParts)) { // if local url isn't empty
 else {
     http_response_code(400); // TODO: maybe...
 }
+
+http_response_code(404);
+echo json_encode([
+    'status' => false,
+    'message' => 'Endpoint doesnt exists.'
+]);
